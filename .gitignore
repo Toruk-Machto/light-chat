@@ -1,0 +1,13 @@
+.gradle/
+.kotlin/
+**/build/
+local.properties
+*.apk
+*.jks
+*.keystore
+.env*
+.DS_Store
+*.p12
+*.pfx
+*.apks
+*keystore-password*
