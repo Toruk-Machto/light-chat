@@ -40,10 +40,12 @@ internal data class VoiceState(val mode: VoiceMode = VoiceMode.Idle, val note: S
 internal class VoiceController(
     private val api: ChatApi,
     private val scope: CoroutineScope,
+    private val dictationLimitMs: Long = 40_000L,
 ) {
     private val mutable = MutableStateFlow(VoiceState())
     val state = mutable.asStateFlow()
     private var job: Job? = null
+    private var recordingLimit: Job? = null
     private var input: PcmInput? = null
     private var captured: ByteArrayOutputStream? = null
     private var player: MediaPlayer? = null
@@ -67,11 +69,18 @@ internal class VoiceController(
         return try {
             input = PcmInput(false) { bytes ->
                 synchronized(buffer) {
-                    if (buffer.size() < MIC_RATE * 2 * 40) buffer.write(bytes)
+                    val remaining = MIC_RATE * 2 * 40 - buffer.size()
+                    if (remaining > 0) buffer.write(bytes, 0, minOf(remaining, bytes.size))
                 }
             }
             captured = buffer
             publish(VoiceMode.Recording, "Listening…")
+            recordingLimit = scope.launch {
+                delay(dictationLimitMs)
+                input?.close()
+                input = null
+                publish(VoiceMode.Recording, "Recording limit reached. Tap Finish dictation to transcribe.")
+            }
             true
         } catch (_: Exception) {
             publish(VoiceMode.Idle, "Could not start the microphone.")
@@ -81,6 +90,8 @@ internal class VoiceController(
 
     fun finishDictating(demo: Boolean, getKey: suspend () -> String?, onText: (String) -> Unit) {
         val buffer = captured ?: return
+        recordingLimit?.cancel()
+        recordingLimit = null
         captured = null
         input?.close()
         input = null
@@ -249,6 +260,8 @@ internal class VoiceController(
     }
 
     fun stop() {
+        recordingLimit?.cancel()
+        recordingLimit = null
         job?.cancel()
         job = null
         captured = null
@@ -396,6 +409,8 @@ private class LiveSession(
         mic?.close()
         speaker.close()
         socket.close(1000, null)
+        // Leaving voice must also end queued audio and pings immediately.
+        socket.cancel()
     }
 }
 

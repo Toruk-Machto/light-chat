@@ -4,7 +4,7 @@ Use OpenRouter’s free chat models, or connect your own OpenAI or Gemini accoun
 
 ## Install
 
-Download `light-chat-v0.2.1-arm64.apk` from [Releases](../../releases). Pair Tool Manager with your Light Phone III and choose the APK to install. If LightOS asks you to trust the developer, compare the signing fingerprint in the release with the one on your phone.
+Download `light-chat-v0.2.2-arm64.apk` from [Releases](../../releases). Pair Tool Manager with your Light Phone III and choose the APK to install. If LightOS asks you to trust the developer, compare the signing fingerprint in the release with the one on your phone.
 
 ## Setup and privacy
 
@@ -13,3 +13,9 @@ Add your provider key in **Settings**. Light Chat stores keys on the device usin
 ## Build
 
 This repository contains the app’s `tool` module. To build it locally, use a matching [Light SDK](https://github.com/lightphone/light-sdk) checkout (SDK version 0.2.4), replace its `tool` directory with this repository’s module, and build with JDK 17 and Android SDK 36. Run `./gradlew :tool:assembleDebug` for a debug build or `./gradlew :tool:assembleRelease` for the unsigned ARM64 release. Sign with your own keystore when distributing your own build.
+
+## Battery update build requirement
+
+Before building against SDK 0.2.4, apply `sdk-patches/0001-lifecycle-and-device-tests.patch` from this repository in the SDK checkout with `git apply /path/to/0001-lifecycle-and-device-tests.patch`. The patch releases screen resources when Android destroys an Activity and permits instrumentation-only test APIs. It keeps the production tool restrictions in place. Automated build services must apply this patch too to reproduce the lifecycle fix. The signed APK in Releases already includes it.
+
+See [BATTERY_UPDATE.md](BATTERY_UPDATE.md) for the changes, emulator checks and battery measurement limits.

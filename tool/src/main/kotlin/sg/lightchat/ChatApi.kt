@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
 import okhttp3.Call
 import okhttp3.Callback
@@ -54,19 +55,23 @@ internal class ChatApi(
             .objects("data").mapNotNull(::routerModel).sortedBy { it.name.lowercase() }
         Provider.OpenAI -> request("$OPENAI/models", provider, requireNotNull(key))
             .objects("data").mapNotNull { openAiModel(it.text("id")) }.sortedBy { it.name }
-        Provider.Gemini -> {
+        Provider.Gemini -> withTimeoutOrNull(120_000L) {
             val models = mutableListOf<Model>()
             var cursor = ""
+            val seenCursors = mutableSetOf<String>()
             do {
+                if (!seenCursors.add(cursor) || seenCursors.size > 20) {
+                    throw ApiProblem("Gemini's model list did not finish. Try refreshing again later.")
+                }
                 val url = "$GEMINI/models".toHttpUrl().newBuilder().addQueryParameter("pageSize", "100").apply {
                     if (cursor.isNotEmpty()) addQueryParameter("pageToken", cursor)
                 }.build().toString()
                 val result = request(url, provider, requireNotNull(key))
                 models += result.objects("models").mapNotNull(::geminiModel)
                 cursor = result.text("nextPageToken")
-            } while (cursor.isNotEmpty() && models.size < 400)
+            } while (cursor.isNotEmpty())
             models.sortedBy { it.name }
-        }
+        } ?: throw ApiProblem("Gemini's model list timed out. Try refreshing again later.")
     }
 
     override suspend fun check(provider: Provider, key: String): KeyStatus {

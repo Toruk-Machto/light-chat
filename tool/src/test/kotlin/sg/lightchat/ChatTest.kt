@@ -243,6 +243,36 @@ class ChatTest {
         assertEquals(listOf(ReplyBlock(ReplyBlockKind.Code, "unfinished")), formatAnswer("```\nunfinished"))
     }
 
+    @Test fun geminiCatalogStopsRepeatedCursorEvenWithNoUsableModels() = runBlocking {
+        var calls = 0
+        val api = apiWith { calls++; """{"models":[],"nextPageToken":"same"}""" }
+        assertFailsWith<ApiProblem> { api.catalog(Provider.Gemini, "fake-key") }
+        assertEquals(2, calls)
+    }
+
+    @Test fun geminiCatalogHasAPageLimitIndependentOfAcceptedModels() = runBlocking {
+        var calls = 0
+        val api = apiWith { calls++; """{"models":[],"nextPageToken":"page$calls"}""" }
+        assertFailsWith<ApiProblem> { api.catalog(Provider.Gemini, "fake-key") }
+        assertEquals(20, calls)
+    }
+
+    @Test fun geminiCatalogFollowsNormalPagesAndKeepsSupportedModels() = runBlocking {
+        var calls = 0
+        val api = apiWith { request ->
+            calls++
+            if (calls == 1) {
+                assertNull(request.url.queryParameter("pageToken"))
+                """{"models":[],"nextPageToken":"next"}"""
+            } else {
+                assertEquals("next", request.url.queryParameter("pageToken"))
+                """{"models":[{"name":"models/gemini-3.8-flash","supportedGenerationMethods":["generateContent"]}]}"""
+            }
+        }
+        assertEquals("gemini-3.8-flash", api.catalog(Provider.Gemini, "fake-key").single().ref.id)
+        assertEquals(2, calls)
+    }
+
     private fun prompt(model: Model) = Prompt(model, "Hello", emptyList(), null, Length.Normal, Effort.Auto)
 
     private fun apiWith(code: Int = 200, fixture: (Request) -> String) = ChatApi(

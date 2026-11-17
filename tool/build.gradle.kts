@@ -11,6 +11,7 @@ android {
     compileSdk = rootProject.ext["compileSdk"] as Int
 
     defaultConfig {
+        testInstrumentationRunner = "sg.lightchat.BatteryChecks"
         minSdk = rootProject.ext["minSdk"] as Int
         targetSdk = rootProject.ext["targetSdk"] as Int
         manifestPlaceholders["sdkVersion"] = property("sdkVersion") as String
@@ -46,4 +47,9 @@ kotlin {
 dependencies {
     implementation(project(":sdk:client"))
     testImplementation(libs.kotlin.test)
+}
+
+// The app already supplies its SDK registry. An empty test registry would shadow it.
+tasks.matching { it.name.startsWith("ksp") && it.name.contains("AndroidTest") }.configureEach {
+    enabled = false
 }

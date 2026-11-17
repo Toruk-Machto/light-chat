@@ -22,16 +22,22 @@ import kotlinx.serialization.json.Json
 data class SavedChats(val chats: List<Chat> = emptyList(), val preferences: Preferences = Preferences())
 
 class ChatStore(dir: File) {
+    companion object {
+        // Activity replacement can briefly overlap the previous screen's final disk write.
+        private val diskLock = Any()
+    }
     private val file = AtomicFile(File(dir, "chats.json"))
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun load(): SavedChats = try {
-        json.decodeFromString<SavedChats>(file.readFully().decodeToString())
-    } catch (_: java.io.FileNotFoundException) {
-        SavedChats()
+    fun load(): SavedChats = synchronized(diskLock) {
+        try {
+            json.decodeFromString<SavedChats>(file.readFully().decodeToString())
+        } catch (_: java.io.FileNotFoundException) {
+            SavedChats()
+        }
     }
 
-    fun save(data: SavedChats) {
+    fun save(data: SavedChats) = synchronized(diskLock) {
         val bytes = json.encodeToString(data).encodeToByteArray()
         val stream = file.startWrite()
         try {

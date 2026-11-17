@@ -2,6 +2,7 @@ package sg.lightchat
 
 import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightViewModel
+import com.thelightphone.sdk.SimpleLightScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,6 +55,8 @@ internal class ChatViewModel(
     private val pendingWrites = Channel<SavedChats>(Channel.CONFLATED)
     private var request: Job? = null
     private var refreshing: Job? = null
+    private var pruning: Job? = null
+    private var resumeModels = false
     private val current get() = mutable.value
     private val gateway get(): ChatGateway = if (current.demo) demoGateway ?: api else api
 
@@ -68,12 +71,33 @@ internal class ChatViewModel(
             change { it.copy(connected = connected) }
             for (data in pendingWrites) storage { store.save(data) }
         }
-        viewModelScope.launch {
+    }
+
+    override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
+        prune()
+        if (pruning?.isActive != true) pruning = viewModelScope.launch {
             while (true) {
                 delay(15 * 60_000L)
                 prune()
             }
         }
+        if (resumeModels) {
+            resumeModels = false
+            refreshModels()
+        }
+    }
+
+    override fun onScreenHide(screen: SimpleLightScreen<Unit>) = pauseBackgroundWork()
+
+    override fun onAppPause() = pauseBackgroundWork()
+
+    private fun pauseBackgroundWork() {
+        pruning?.cancel()
+        pruning = null
+        resumeModels = resumeModels || refreshing?.isActive == true
+        refreshing?.cancel()
+        refreshing = null
+        change { it.copy(loadingModels = false) }
     }
 
     private suspend fun <T> storage(operation: () -> T): T? = try {
